@@ -1,8 +1,7 @@
 
 struct world
 {
-    std::vector<particle*> Particles;
-    u32 ParticlesCount;
+    std::vector<body*> Bodies;
 
     v2 PushForce;
     v2 Anchor;

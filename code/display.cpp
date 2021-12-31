@@ -62,7 +62,7 @@ void ClearColorBuffer(texture_t* Texture, u32 color)
 
 void DrawPixel(texture_t* Texture, u32 X, u32 Y, u32 Color)
 {
-    if(X > 0 && Y > 0 && X < Texture->Height && Y < Texture->Height)
+    if(X > 0 && Y > 0 && X < Texture->Width && Y < Texture->Height)
     {
         Texture->Memory[Texture->Width*Y + X] = Color;
     }
@@ -236,6 +236,7 @@ DrawRotRect(texture_t* RenderBuffer, v2 Origin, v2 XAxis, v2 YAxis, u32 color, t
                     v4 SrcTexel = Unpack4x8ColorARGB(ColorFromMemory);
                     SrcTexel = SRGBTo1Linear(SrcTexel);
 
+#if 1
                     SrcTexel = Hadamard(SrcTexel, UnpackedColor);
                     SrcTexel.x = Clamp01(SrcTexel.x);
                     SrcTexel.y = Clamp01(SrcTexel.y);
@@ -245,7 +246,7 @@ DrawRotRect(texture_t* RenderBuffer, v2 Origin, v2 XAxis, v2 YAxis, u32 color, t
                     DstPixel = SRGBTo1Linear(DstPixel);
 
                     SrcTexel = (1.0f - (SrcTexel.w / 255.0f))*DstPixel + SrcTexel;
-
+#endif
                     SrcTexel = LinearTo255SRGB(SrcTexel);
 
                     u32 PreNewColor = (((u32)(SrcTexel.w) << 24) | 
@@ -289,33 +290,6 @@ void DrawRect(texture_t* RenderBuffer, v2 Min, v2 Max, u32 color)
     }
 }
 
-texture_t 
-CreateRectangleTexture(u32 Width, u32 Height, u32 color)
-{
-    texture_t Result = {};
-
-    Result.Width = Width;
-    Result.Height = Height;
-    Result.Memory = (u32*)malloc(Width*Height*sizeof(u32));
-
-    u8* Row = (u8*)Result.Memory;
-    for(u32 Y = 0;
-        Y < Height;
-        ++Y)
-    {
-        u32* Pixel = (u32*)Row;
-        for(u32 X = 0;
-            X < Width;
-            ++X)
-        {
-            *Pixel++ = color;
-        }
-        Row += (u32)Width*sizeof(u32);
-    }
-
-    return Result;
-}
-
 static void
 CirclePoints(texture_t* Texture, v2 C, v2 P, u32 Color)
 {
@@ -340,7 +314,7 @@ CircleLinePoints(texture_t* Texture, v2 C, v2 P, u32 Color)
 }
 
 void
-DrawCircle(v2 P, u32 Width, u32 Height, r32 Radius, u32 Color)
+DrawCircle(v2 P, u32 Width, u32 Height, r32 Radius, r32 Rotation, u32 Color)
 {
     texture_t CircleTexture = {};
 
@@ -351,39 +325,6 @@ DrawCircle(v2 P, u32 Width, u32 Height, r32 Radius, u32 Color)
     v2 TextureOrigin = V2i((Width / 2) - 1, (Height / 2) - 1);
     v2 TextureOriginN = TextureOrigin * V2i(1/Width, 1/Height);
 
-#if 0
-    u8* Row = (u8*)CircleTexture.Memory;
-    for(u32 Y = 0;
-        Y < Height;
-        ++Y)
-    {
-        u32* Pixel = (u32*)Row;
-        for(u32 X = 0;
-            X < Width;
-            ++X)
-        {
-            v2 PixelP = V2(X, Y) * V2(1/Width, 1/Height);
-            v2 Dist = PixelP - Radius;
-
-            r32 pct = 1.0f - Step(Length(Dist), Radius);
-
-            v4 Color = V4(pct*255.0f, pct*255.0f, pct*255.0f, pct*255.0);
-            if((Inner(Dist, Dist)) <= Square(Radius))
-            {
-                if((Y == TextureOrigin.y) && (X >= TextureOrigin.x))
-                {
-                    Color = V4(0, 0, 0, 255);
-                }
-            }
-
-            *Pixel++ = (((u32)(Color.w) << 24) | 
-                        ((u32)(Color.x) <<  0) | 
-                        ((u32)(Color.y) <<  8) | 
-                        ((u32)(Color.z) << 16));
-        }
-        Row += (u32)Width*sizeof(u32);
-    }
-#else
     i32 X = 0;
     i32 Y = (i32)Radius;
     i32 d = 3 - 2*(i32)Radius;
@@ -402,8 +343,16 @@ DrawCircle(v2 P, u32 Width, u32 Height, r32 Radius, u32 Color)
         X++;
         CirclePoints(&CircleTexture, TextureOrigin, V2i(X, Y), Color);
     }
-#endif
-    DrawRotRect(ColorBuffer, P, Width*V2(1, 0), Height*V2(0, 1), Color, &CircleTexture);
+    DrawLine(&CircleTexture, TextureOrigin, V2(TextureOrigin.x + Radius, TextureOrigin.y), Color);
+
+    v2 XAxis = Width*V2(1, 0);
+    v2 YAxis = Height*V2(0, 1);
+
+    // TODO: Make it rotate around TextureOrigin and not around P;
+    XAxis = rotate(XAxis, Rotation);
+    YAxis = rotate(YAxis, Rotation);
+
+    DrawRotRect(ColorBuffer, P, XAxis, YAxis, Color, &CircleTexture);
 }
 
 void
@@ -418,39 +367,6 @@ DrawFilledCircle(v2 P, u32 Width, u32 Height, r32 Radius, u32 Color)
     v2 TextureOrigin = V2i((Width / 2) - 1, (Height / 2) - 1);
     v2 TextureOriginN = TextureOrigin * V2i(1/Width, 1/Height);
 
-#if 0
-    u8* Row = (u8*)BallTexture.Memory;
-    for(u32 Y = 0;
-        Y < Height;
-        ++Y)
-    {
-        u32* Pixel = (u32*)Row;
-        for(u32 X = 0;
-            X < Width;
-            ++X)
-        {
-            v2 PixelP = V2i(X, Y) * V2i(1/Width, 1/Height);
-            v2 ToCenter = TextureOriginN - PixelP;
-
-            r32 pct = 1.0f - Step(Length(ToCenter), R);
-
-            v4 Color = V4(pct*255, pct*255, pct*255, pct*255.0f);
-            if((Inner(ToCenter, ToCenter)) <= Square(R))
-            {
-                if((Y == TextureOrigin.y) && (X >= TextureOrigin.x))
-                {
-                    Color = V4(0, 0, 0, 255);
-                }
-            }
-
-            *Pixel++ = (((u32)(Color.w) << 24) | 
-                        ((u32)(Color.x) <<  0) | 
-                        ((u32)(Color.y) <<  8) | 
-                        ((u32)(Color.z) << 16));
-        }
-        Row += (u32)Width*sizeof(u32);
-    }
-#else
     i32 X = 0;
     i32 Y = (i32)Radius;
     i32 d = 3 - 2*(i32)Radius;
@@ -469,42 +385,21 @@ DrawFilledCircle(v2 P, u32 Width, u32 Height, r32 Radius, u32 Color)
         X++;
         CircleLinePoints(&BallTexture, TextureOrigin, V2i(X, Y), Color);
     }
-#endif
 
     DrawRotRect(ColorBuffer, P, Width*V2(1, 0), Height*V2(0, 1), Color, &BallTexture);
 }
 
-texture_t 
-CreateGridTexture(u32 Dim)
+void
+DrawPolygon(v2 P, std::vector<v2> Vertices, u32 Color)
 {
-    texture_t Result = {};
-
-    Result.Width = Dim;
-    Result.Height = Dim;
-    Result.Memory = (u32*)malloc(Dim*Dim*sizeof(u32));
-
-    u8* Row = (u8*)Result.Memory;
-    for(u32 Y = 0;
-        Y < Dim;
-        ++Y)
+    for(u32 PIndex = 0;
+        PIndex < Vertices.size();
+        ++PIndex)
     {
-        u32* Pixel = (u32*)Row;
-        for(u32 X = 0;
-            X < Dim;
-            ++X)
-        {
-            v4 Color = V4(0, 0, 0, 0);
-            if((X % 15 == 0) || (Y % 15 == 0)) {Color = V4(255, 255, 255, 255);}
-
-            u32 NewColor = (((u32)(Color.w) << 24) |
-                            ((u32)(Color.x) <<  0) |
-                            ((u32)(Color.y) <<  8) |
-                            ((u32)(Color.z) << 16));
-            *Pixel++ = NewColor;
-        }
-        Row += (u32)Dim*sizeof(u32);
+        i32 CurrIndex = PIndex;
+        i32 NextIndex = (PIndex + 1) % Vertices.size();
+        DrawLine(ColorBuffer, Vertices[CurrIndex], Vertices[NextIndex], Color);
     }
-    return Result;
 }
 
 void DestroyTexture(texture_t* Texture)

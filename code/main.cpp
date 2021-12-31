@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 #include "display.h"
-#include "p_particle.cpp"
+#include "p_bodies.cpp"
 
 bool is_running;
 
@@ -11,8 +11,6 @@ i32 PreviousFrameTime = 0;
 r32 DeltaTime = 0;
 r32 TimeForFrame = 0;
 r32 dtForFrame = 0;
-
-u32 CubeFOV = 700;
 
 world World;
 
@@ -27,18 +25,10 @@ setup(void)
 
     TimeForFrame = 1.0f / FPS;
     World.Anchor = V2(ColorBuffer->Width / 2, 30);
-    World.SpringTightness = 600;
-    World.SpringRestLength = 10;
-
-    World.ParticlesCount = 8;
-    for(u32 ParticleIndex = 1;
-        ParticleIndex < World.ParticlesCount + 1;
-        ++ParticleIndex)
-    {
-        World.Particles.push_back(new particle(V2(World.Anchor.x, World.Anchor.y + (ParticleIndex * World.SpringRestLength)), 5));
-    }
-
-    //World.Particles.push_back(new particle(V2(100, 50), 5));
+    World.SpringTightness = 3000;
+    World.SpringRestLength = 200;
+    World.Bodies.push_back(new body(V2(150, 150), 1.0, new shape(50, 50, 23)));
+    World.Bodies.push_back(new body(V2(300, 300), 1.0, new shape(50, 50, 23)));
     
     World.PushForce = V2(0, 0);
 
@@ -75,8 +65,7 @@ process_input(void)
             {
                 i32 MouseX, MouseY;
                 SDL_GetMouseState(&MouseX, &MouseY);
-                particle* Particle = new particle(V2(MouseX, MouseY), 5);
-                World.Particles.push_back(Particle);
+                World.Bodies.push_back(new body(V2(MouseX, MouseY), 5.0f, new shape(50, 50, 23)));
             }
     }
 }
@@ -96,61 +85,67 @@ update(void)
     if (DeltaTime > TimeForFrame) DeltaTime = TimeForFrame;
     PreviousFrameTime = SDL_GetTicks();
 
-    // Particles update
+    // Bodies update
 
-    v2 SpringForce = GenerateSpringForce(*World.Particles[0], World.Anchor, World.SpringRestLength, World.SpringTightness);
-    World.Particles[0]->AddForce(SpringForce);
-    for(u32 ParticleIndex = 1;
-        ParticleIndex < World.ParticlesCount;
-        ++ParticleIndex)
+    for(body* Body : World.Bodies)
     {
-        SpringForce = GenerateSpringForce(*World.Particles[ParticleIndex], *World.Particles[ParticleIndex - 1], World.SpringRestLength, World.SpringTightness);
-        World.Particles[ParticleIndex]->AddForce(SpringForce);
-        World.Particles[ParticleIndex-1]->AddForce(-SpringForce);
-    }
+        for(body* BodyCollider : World.Bodies)
+        {
+            if(Body != BodyCollider)
+            {
+                contact Contact = {};
+                if (IsColliding(Body, BodyCollider, &Contact))
+                {
+                    Body->IsColliding = true;
+                    BodyCollider->IsColliding = true;
 
-    for(particle* Particle : World.Particles)
-    {
-#if 0
-        if(Particle->d.y > World.Liquid.Min.y)
-        {
-            r32 Value = 0.3f;
-            Particle->AddForce(GenerateDragForce(*Particle, Value));
+                    DrawFilledCircle(Contact.Start - 2, 6, 6, 2, 0xFFFFFF00);
+                    DrawFilledCircle(Contact.End - 2, 6, 6, 2, 0xFFFFFF00);
+                    DrawLine(ColorBuffer, Contact.End, Contact.Start, 0xFFFFFF00);
+                    ResolveCollision(&Contact);
+                }
+                else
+                {
+                    Body->IsColliding = false;
+                    BodyCollider->IsColliding = false;
+                }
+            }
         }
-        else
-        {
-            Particle->AddForce(V2(2.0f, 0.0f));
-        }
-#else
-#endif
-        Particle->AddForce(V2(0.0f, 9.8f*Particle->Mass));
-        Particle->AddForce(World.PushForce);
-        Particle->AddForce(GenerateDragForce(*Particle, 0.002));
-        Particle->Integrate(DeltaTime);
+        Body->AddForce(V2(0.0f, 9.8f*Body->Mass));
+        //Body->AddForce(World.PushForce);
+        Body->AddForce(GenerateDragForce(*Body, 0.002));
+        //Body->AddTorque(100/PixelsPerMeter);
+        Body->Update(DeltaTime);
 
-        if((Particle->d.x - 3) <= 0)
+        switch(Body->Shape->Type)
         {
-            v2 Normal = V2(1, 0);
-            Particle->dP.x *= -1;
-            Particle->d.x = 3;
-        }
-        else if((Particle->d.x + 3) >= ColorBuffer->Width)
-        {
-            v2 Normal = V2(-1, 0);
-            Particle->dP.x *= -1;
-            Particle->d.x = ColorBuffer->Width - 3;
-        }
-        if((Particle->d.y - 3) <= 0)
-        {
-            v2 Normal = V2(0, 1);
-            Particle->dP.y *= -1;
-            Particle->d.y = 3;
-        }
-        else if((Particle->d.y + 3) >= ColorBuffer->Height)
-        {
-            v2 Normal = V2(0, -1);
-            Particle->dP.y *= -1;
-            Particle->d.y = ColorBuffer->Height - 3;
+            case ShapeType_Circle:
+            {
+                if((Body->d.x) <= 0)
+                {
+                    v2 Normal = V2(1, 0);
+                    Body->dP.x *= -1;
+                    Body->d.x = 0;
+                }
+                else if((Body->d.x + 2.0f*Body->Shape->Radius) >= ColorBuffer->Width)
+                {
+                    v2 Normal = V2(-1, 0);
+                    Body->dP.x *= -1;
+                    Body->d.x = ColorBuffer->Width - 2.0f*Body->Shape->Radius;
+                }
+                if((Body->d.y) <= 0)
+                {
+                    v2 Normal = V2(0, 1);
+                    Body->dP.y *= -1;
+                    Body->d.y = 0;
+                }
+                else if((Body->d.y + 2.0f*Body->Shape->Radius) >= ColorBuffer->Height)
+                {
+                    v2 Normal = V2(0, -1);
+                    Body->dP.y *= -1;
+                    Body->d.y = ColorBuffer->Height - 2.0f*Body->Shape->Radius;
+                }
+            } break;
         }
     }
 }
@@ -158,26 +153,38 @@ update(void)
 static void 
 render(void)
 {
-    ClearColorBuffer(ColorBuffer, 0xFF056263);
+
     v2 P = {(r32)ColorBuffer->Width/2, (r32)ColorBuffer->Height/2};
 
     //DrawRect(ColorBuffer, World.Liquid.Min, World.Liquid.Max, 0xFF83D7EE);
 
-    DrawFilledCircle(World.Anchor, 10, 10, 3, 0xFFFFFF00);
-    DrawLine(ColorBuffer, World.Anchor + 5, World.Particles[0]->d + 5, 0xFF964B00);
-    for(u32 ParticleIndex = 0;
-        ParticleIndex < World.ParticlesCount - 1;
-        ++ParticleIndex)
+    for(body* Body : World.Bodies)
     {
-        DrawLine(ColorBuffer, World.Particles[ParticleIndex]->d + 5, World.Particles[ParticleIndex + 1]->d + 5, 0xFF964B00);
-    }
-
-    for(particle* Particle : World.Particles)
-    {
-        DrawFilledCircle(Particle->d, 10, 10, 3, 0xFFFFFFFF);
+        switch(Body->Shape->Type)
+        {
+            case ShapeType_Circle:
+            {
+                u32 Color = Body->IsColliding ? 0xFFFF0000 : 0xFFFFFFFF;
+                // NOTE: Warning!!! It is rotating around Body->d!!!!
+                // It should rotate around Texture Origin.
+                // If I just change the axes with rotating, then it will 
+                // not affect the point, it rotating about
+                // But still rotating corectly!!! Chenge only how it rotate
+                DrawCircle(Body->d, Body->Shape->Width, Body->Shape->Height, Body->Shape->Radius, Body->Rotation, Color);
+            } break;
+            case ShapeType_Polygon:
+            {
+                DrawPolygon(Body->d, Body->Shape->WorldVertices, 0xFFFFFFFF);
+            } break;
+            case ShapeType_Box:
+            {
+                DrawPolygon(Body->d, Body->Shape->WorldVertices, 0xFFFFFFFF);
+            }
+        }
     }
 
     RenderColorBuffer();
+    ClearColorBuffer(ColorBuffer, 0xFF056263);
 
     SDL_RenderPresent(renderer);
 }

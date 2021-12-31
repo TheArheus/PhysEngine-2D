@@ -221,6 +221,19 @@ V3(r32 X, v2 YZ)
 }
 
 inline v4
+V4(r32 V)
+{
+    v4 Result = {};
+
+    Result.x = V;
+    Result.y = V;
+    Result.z = V;
+    Result.w = V;
+
+    return Result;
+}
+
+inline v4
 V4(r32 X, r32 Y, r32 Z, r32 W)
 {
     v4 Result = {};
@@ -434,7 +447,7 @@ Perp(v2 A)
 inline v2
 Normalize(v2 A)
 {
-    v2 Result = A * (1 / LengthSqr(A));
+    v2 Result = A * (1 / Length(A));
     return Result;
 }
 
@@ -445,8 +458,30 @@ NOZ(v2 A)
     r32 LengthSquared = LengthSqr(A);
     if(LengthSquared > Square(0.00001))
     {
-        Result = A * (1 / LengthSquared);
+        Result = A * (1 / SquareRoot(LengthSquared));
     }
+    return Result;
+}
+
+inline v2
+rotate(v2 V, r32 A)
+{
+    v2 Result = {};
+
+    Result.x = V.x*cosf(A) - V.y*sinf(A);
+    Result.y = V.x*sinf(A) + V.y*cosf(A);
+
+    return Result;
+}
+
+inline v2
+rotate_c(v2 V, v2 C, r32 A)
+{
+    v2 Result = {};
+
+    Result.x = C.x + (V.x - C.x)*cosf(A) - (V.y - C.y)*sinf(A);
+    Result.y = C.y + (V.x - C.x)*sinf(A) + (V.y - C.y)*cosf(A);
+
     return Result;
 }
 
@@ -637,6 +672,41 @@ operator/(r32 A, v3 B)
     return B;
 }
 
+inline v3
+rotate_x(v3 V, r32 A)
+{
+    v3 Result = {};
+
+    Result.x = V.x;
+    Result.y = V.y*cosf(A) - V.z*sinf(A);
+    Result.z = V.y*sinf(A) + V.z*cosf(A);
+
+    return Result;
+}
+
+inline v3
+rotate_y(v3 V, r32 A)
+{
+    v3 Result = {};
+
+    Result.x = V.x*cosf(A) - V.z*sinf(A);
+    Result.y = V.y;
+    Result.z = V.x*sinf(A) + V.z*cosf(A);
+
+    return Result;
+}
+
+inline v3
+rotate_z(v3 V, r32 A)
+{
+    v3 Result = {};
+
+    Result.x = V.x*cosf(A) - V.y*sinf(A);
+    Result.y = V.x*sinf(A) + V.y*sinf(A);
+    Result.z = V.z;
+
+    return Result;
+}
 
 inline v4 
 operator+(v4 A, v4 B)

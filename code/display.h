@@ -19,7 +19,7 @@ extern SDL_Texture*     texture;
 extern texture_t*       ColorBuffer;
 
 #include "hmath.h"
-#include "p_particle.h"
+#include "p_bodies.h"
 #include "world.h"
 
 bool InitWindow();
@@ -30,10 +30,9 @@ void DrawGrid(texture_t* Texture, u32);
 void DrawLine(texture_t* Texture, v2 Min, v2 Max, u32 Color);
 void DrawRect(texture_t* RenderBuffer, v2, v2, u32);
 void DrawRotRect(texture_t* RenderBuffer, v2 Origin, v2 XAxis, v2 YAxis, u32 color, texture_t* Texture);
-void DrawCircle(v2 P, u32 Width, u32 Height, r32 Radius, u32 Color);
+void DrawCircle(v2 P, u32 Width, u32 Height, r32 Radius, r32 Rotation, u32 Color);
 void DrawFilledCircle(v2 P, u32 Width, u32 Height, r32 R, u32 Color);
-texture_t CreateRectangleTexture(u32 Width, u32 Height, u32 color);
-texture_t CreateGridTexture(u32 Dim);
+void DrawPolygon(v2 P, std::vector<v2> Vertices, u32 Color);
 void DestroyWindow();
 
 #define DISPLAY_H_
