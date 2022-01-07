@@ -199,6 +199,18 @@ V3(r32 X, r32 Y, r32 Z)
 }
 
 inline v3
+V3(r32 V)
+{
+    v3 Result = {};
+
+    Result.x = V;
+    Result.y = V;
+    Result.z = V;
+
+    return Result;
+}
+
+inline v3
 V3(v2 XY, r32 Z)
 {
     v3 Result = {};
@@ -440,6 +452,13 @@ operator/(r32 A, v2 B)
 inline v2 
 Perp(v2 A)
 {
+    v2 Result = {A.y, -A.x};
+    return Result;
+}
+
+inline v2 
+PerpBack(v2 A)
+{
     v2 Result = {-A.y, A.x};
     return Result;
 }
@@ -464,6 +483,14 @@ NOZ(v2 A)
 }
 
 inline v2
+Normal(v2 A)
+{
+    v2 Result = {};
+    Result = Normalize(Perp(A));
+    return Result;
+}
+
+inline v2
 rotate(v2 V, r32 A)
 {
     v2 Result = {};
@@ -482,6 +509,13 @@ rotate_c(v2 V, v2 C, r32 A)
     Result.x = C.x + (V.x - C.x)*cosf(A) - (V.y - C.y)*sinf(A);
     Result.y = C.y + (V.x - C.x)*sinf(A) + (V.y - C.y)*cosf(A);
 
+    return Result;
+}
+
+inline r32
+Cross(v2 A, v2 B)
+{
+    r32 Result = A.x*B.y - A.y*B.x;
     return Result;
 }
 
@@ -704,6 +738,18 @@ rotate_z(v3 V, r32 A)
     Result.x = V.x*cosf(A) - V.y*sinf(A);
     Result.y = V.x*sinf(A) + V.y*sinf(A);
     Result.z = V.z;
+
+    return Result;
+}
+
+inline v3
+Cross(v3 A, v3 B)
+{
+    v3 Result = {};
+
+    Result.x = (A.y*B.z - A.z*B.y);
+    Result.y = (A.z*B.x - A.x*B.z);
+    Result.z = (A.x*B.y - A.y*A.x);
 
     return Result;
 }

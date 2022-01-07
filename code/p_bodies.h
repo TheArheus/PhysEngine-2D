@@ -44,13 +44,13 @@ struct body
     r32 InvI; 
 
     r32 Restitution;
+    r32 Friction;
 
     v2 SumForces;
     r32 SumTorque;
 
     b32 IsColliding;
 
-    body(v2 P, r32 Mass);
     body(v2 P, r32 Mass, shape* Shape);
     ~body();
 
@@ -60,8 +60,10 @@ struct body
     void AddForce(const v2& Force);
     void AddTorque(r32 Torque);
     void ApplyImpulse(v2 Impulse);
+    void ApplyImpulse(v2 Impulse, v2 Distance);
     void ClearForces();
     void ClearTorque();
+    b32 IsStatic();
 };
 
 struct contact 
@@ -87,6 +89,8 @@ v2 GenerateSpringForce(const body& BodyA, const body& BodyB, r32 RestLength, r32
 
 b32 IsColliding(body* A, body* B, contact* ContactInfo);
 b32 CircleCircleCollision(body* A, body* B, contact* ContactInfo);
+b32 CirclePolyCollision(body* Poly, body* Circle, contact* ContactInfo);
+b32 PolyPolyCollision(body* A, body* B, contact* ContactInfo);
 void ResolvePenetration(contact* ContactInfo);
 void ResolveCollision(contact* ContactInfo);
 

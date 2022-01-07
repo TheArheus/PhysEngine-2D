@@ -1,28 +1,20 @@
 
-body::body(v2 P_, r32 Mass_)
-{
-    this->d = P_;
-    this->Mass = Mass_;
-    this->InvMass = 1 / Mass_;
-
-    this->Rotation = 0.0f;
-    this->AngularVelocity = 0.0f;
-    this->AngularAcceleration = 0.0f;
-
-    this->I = 0.0;
-    this->InvI = 0.0;
-
-    this->Restitution = 1.0f;
-
-    ClearForces();
-    ClearTorque();
-}
+#include <limits>
 
 body::body(v2 P_, r32 Mass_, shape* Shape_)
 {
     this->d = P_ - V2(Shape_->Width / 2, Shape_->Height / 2);
+    this->dP = {};
+    this->ddP = {};
     this->Mass = Mass_;
-    this->InvMass = 1 / Mass_;
+    if(Mass != 0.0)
+    {
+        this->InvMass = 1 / Mass_;
+    }
+    else
+    {
+        this->InvMass = 0.0f;
+    }
 
     this->Rotation = 0.0f;
     this->AngularVelocity = 0.0f;
@@ -30,9 +22,17 @@ body::body(v2 P_, r32 Mass_, shape* Shape_)
 
     this->Shape = Shape_;
     this->I = Shape_->GetMomentOfInertia()*Mass_;
-    this->InvI = 1/this->I;
+    if (this->I != 0.0f)
+    {
+        this->InvI = 1 / this->I;
+    }
+    else
+    {
+        this->InvI = 0.0;
+    }
 
     this->Restitution = 1.0f;
+    this->Friction = 0.7f;
 
     ClearForces();
     ClearTorque();
@@ -44,7 +44,7 @@ body::~body()
 
 void body::IntegrateLinear(r32 DeltaTime)
 {
-    if(fabsf(this->InvMass) > 0.001)
+    if(!IsStatic())
     {
         this->ddP = this->SumForces * this->InvMass;
         this->dP += this->ddP*DeltaTime;
@@ -55,7 +55,7 @@ void body::IntegrateLinear(r32 DeltaTime)
 
 void body::IntegrateAngular(r32 DeltaTime)
 {
-    if(fabsf(this->InvMass) > 0.001)
+    if (!IsStatic())
     {
         this->AngularAcceleration = this->SumTorque * this->InvI;
         this->AngularVelocity += this->AngularAcceleration * DeltaTime;
@@ -68,11 +68,7 @@ void body::Update(r32 DeltaTime)
 {
     IntegrateLinear(DeltaTime);
     IntegrateAngular(DeltaTime);
-    b32 IsPolygon = Shape->Type == ShapeType_Box || Shape->Type == ShapeType_Polygon;
-    if(IsPolygon)
-    {
-        Shape->UpdateVertices(d, Rotation);
-    }
+    Shape->UpdateVertices(d, Rotation);
 }
 
 void body::AddForce(const v2& Force)
@@ -87,9 +83,18 @@ void body::AddTorque(r32 Torque)
 
 void body::ApplyImpulse(v2 Impulse)
 {
-    if(fabsf(this->InvMass) > 0.001)
+    if (!IsStatic())
     {
         dP += Impulse * InvMass;
+    }
+}
+
+void body::ApplyImpulse(v2 Impulse, v2 Radius)
+{
+    if (!IsStatic())
+    {
+        dP += Impulse * InvMass;
+        AngularVelocity += Cross(Radius, Impulse) * InvI;
     }
 }
 
@@ -101,6 +106,13 @@ void body::ClearForces()
 void body::ClearTorque()
 {
     this->SumTorque = 0.0f;
+}
+
+b32 body::IsStatic()
+{
+    r32 Epsilon = 0.005f;
+    b32 Result = fabsf(InvMass) < Epsilon;
+    return Result;
 }
 
 v2 GenerateDragForce(const body& Body, r32 k)
@@ -192,6 +204,8 @@ shape::shape(r32 Width, r32 Height, std::vector<v2> Vertices)
     this->Width = Width;
     this->Height = Height;
     this->Type = ShapeType_Polygon;
+
+    this->WorldVertices.resize(Vertices.size());
 }
 
 shape::~shape()
@@ -200,14 +214,17 @@ shape::~shape()
 
 void shape::UpdateVertices(v2 P, r32 Rotation)
 {
-    for(u32 PointIndex = 0;
-        PointIndex < this->LocalVertices.size();
-        ++PointIndex)
+    if(Type == ShapeType_Box || Type == ShapeType_Polygon)
     {
-        v2 Point = this->LocalVertices[PointIndex];
-        Point = rotate(Point, Rotation);
-        Point += P;
-        this->WorldVertices[PointIndex] = Point;
+        for(u32 PointIndex = 0;
+            PointIndex < this->LocalVertices.size();
+            ++PointIndex)
+        {
+            v2 Point = this->LocalVertices[PointIndex];
+            Point = rotate(Point, Rotation);
+            Point += P;
+            this->WorldVertices[PointIndex] = Point;
+        }
     }
 }
 
@@ -222,10 +239,11 @@ r32 shape::GetMomentOfInertia()
         } break;
         case ShapeType_Box:
         {
-            Result = (Square(this->Width) + Square(this->Height)) * 0.0833333f;
+            Result = (Square(this->Width) + Square(this->Height)) * 0.083333f;
         } break;
         case ShapeType_Polygon:
         {
+            Result = 500.0f;
         } break;
     }
     return Result;
@@ -235,10 +253,29 @@ r32 shape::GetMomentOfInertia()
 b32 IsColliding(body* A, body* B, contact* ContactInfo = nullptr)
 {
     b32 Result = false;
-    if(A->Shape->Type == ShapeType_Circle && B->Shape->Type == ShapeType_Circle)
+
+    b32 AIsCircle  = A->Shape->Type == ShapeType_Circle;
+    b32 BIsCircle  = B->Shape->Type == ShapeType_Circle;
+    b32 AIsPolygon = ((A->Shape->Type == ShapeType_Box) || (A->Shape->Type == ShapeType_Polygon));
+    b32 BIsPolygon = ((B->Shape->Type == ShapeType_Box) || (B->Shape->Type == ShapeType_Polygon));
+
+    if(AIsCircle && BIsCircle)
     {
         Result = CircleCircleCollision(A, B, ContactInfo);
     }
+    else if(AIsPolygon && BIsPolygon)
+    {
+        Result = PolyPolyCollision(A, B, ContactInfo);
+    }
+    else if(AIsPolygon && BIsCircle)
+    {
+        Result = CirclePolyCollision(A, B, ContactInfo);
+    }
+    else if(BIsPolygon && AIsCircle)
+    {
+        Result = CirclePolyCollision(B, A, ContactInfo);
+    }
+
     return Result;
 }
 
@@ -265,34 +302,249 @@ b32 CircleCircleCollision(body* A, body* B, contact* ContactInfo)
     return AreColliding;
 }
 
+b32 CirclePolyCollision(body* Poly, body* Circle, contact* ContactInfo)
+{
+    b32 Result = false;
+    b32 IsOutside = false;
+
+    v2 MinimumCurrVertex = {};
+    v2 MinimumNextVertex = {};
+    r32 DistanceCircleEdge = -FLT_MAX;
+
+    for(u32 PIndex = 0;
+        PIndex < Poly->Shape->WorldVertices.size();
+        ++PIndex)
+    {
+        v2 VertexA = Poly->Shape->WorldVertices[PIndex];
+        v2 VertexB = Poly->Shape->WorldVertices[(PIndex + 1) % Poly->Shape->WorldVertices.size()];
+        v2 Edge = VertexB - VertexA;
+        v2 Norm = Normal(Edge);
+
+        v2 VertexToCircleCenter = Circle->d - VertexA;
+        r32 Projection = Inner(VertexToCircleCenter, Norm);
+
+        if(Projection > 0)
+        {
+            DistanceCircleEdge = Projection;
+            MinimumCurrVertex = VertexA;
+            MinimumNextVertex = VertexB;
+            IsOutside = true;
+            break;
+        }
+        else
+        {
+            if(Projection > DistanceCircleEdge)
+            {
+                DistanceCircleEdge = Projection;
+                MinimumCurrVertex = VertexA;
+                MinimumNextVertex = VertexB;
+            }
+        }
+    }
+
+    if(IsOutside)
+    {
+        v2 VertexA = Circle->d - MinimumCurrVertex;
+        v2 VertexB = MinimumNextVertex - MinimumCurrVertex;
+
+        if(Inner(VertexA, VertexB) < 0)
+        {
+            // Region A
+            if(Length(VertexA) < Circle->Shape->Radius)
+            {
+                ContactInfo->A = Poly;
+                ContactInfo->B = Circle;
+                ContactInfo->Depth = Circle->Shape->Radius - Length(VertexA);
+                ContactInfo->Normal = Normalize(VertexA);
+                ContactInfo->Start = Circle->d - ContactInfo->Normal * Circle->Shape->Radius;
+                ContactInfo->End = ContactInfo->Start + (ContactInfo->Normal * ContactInfo->Depth);
+
+                Result = true;
+            }
+        }
+        else
+        {
+            VertexA = Circle->d - MinimumNextVertex;
+            VertexB = MinimumCurrVertex - MinimumNextVertex;
+
+            if(Inner(VertexA, VertexB) < 0)
+            {
+                // Region B
+                if(Length(VertexA) < Circle->Shape->Radius)
+                {
+                    ContactInfo->A = Poly;
+                    ContactInfo->B = Circle;
+                    ContactInfo->Depth = Circle->Shape->Radius - Length(VertexA);
+                    ContactInfo->Normal = Normalize(VertexA);
+                    ContactInfo->Start = Circle->d - ContactInfo->Normal * Circle->Shape->Radius;
+                    ContactInfo->End = ContactInfo->Start + (ContactInfo->Normal * ContactInfo->Depth);
+
+                    Result = true;
+                }
+            }
+            else
+            {
+                // Region C
+                if(DistanceCircleEdge < Circle->Shape->Radius)
+                {
+                    ContactInfo->A = Poly;
+                    ContactInfo->B = Circle;
+                    ContactInfo->Depth = Circle->Shape->Radius - DistanceCircleEdge;
+                    ContactInfo->Normal = Normal(MinimumNextVertex - MinimumCurrVertex);
+                    ContactInfo->Start = Circle->d - ContactInfo->Normal * Circle->Shape->Radius;
+                    ContactInfo->End = ContactInfo->Start + ContactInfo->Normal * ContactInfo->Depth;
+
+                    Result = true;
+                }
+            }
+        }
+    }
+    else
+    {
+        ContactInfo->A = Poly;
+        ContactInfo->B = Circle;
+        ContactInfo->Depth = Circle->Shape->Radius - DistanceCircleEdge;
+        ContactInfo->Normal = Normal(MinimumNextVertex - MinimumCurrVertex);
+        ContactInfo->Start = Circle->d - ContactInfo->Normal * Circle->Shape->Radius;
+        ContactInfo->End = ContactInfo->Start + ContactInfo->Normal * ContactInfo->Depth;
+        Result = true;
+    }
+
+    return Result;
+}
+
+r32 FindMinSeparation(shape* A, shape* B, v2& Axis, v2& P)
+{
+    r32 Separation = -FLT_MAX;
+    for(u32 PointAIndex = 0; 
+        PointAIndex < A->WorldVertices.size();
+        ++PointAIndex)
+    {
+        v2 VertexA = A->WorldVertices[PointAIndex];
+        v2 NextA = A->WorldVertices[(PointAIndex + 1) % A->WorldVertices.size()];
+        v2 Edge = NextA - VertexA;
+
+        v2 N = Normal(Edge);
+
+        r32 MinimumSeparation = FLT_MAX;
+        v2  MinimumVertex;
+        for(u32 PointBIndex = 0; 
+            PointBIndex < B->WorldVertices.size();
+            ++PointBIndex)
+        {
+            v2 VertexB = B->WorldVertices[PointBIndex];
+            r32 Projection = Inner(VertexB - VertexA, N);
+            if(Projection < MinimumSeparation)
+            {
+                MinimumSeparation = Projection;
+                MinimumVertex = VertexB;
+            }
+        }
+
+        if(MinimumSeparation > Separation)
+        {
+            Separation = MinimumSeparation;
+            Axis = Edge;
+            P = MinimumVertex;
+        }
+    }
+
+    return Separation;
+}
+
+b32 PolyPolyCollision(body* BodyA, body* BodyB, contact* ContactInfo)
+{
+    shape* A = BodyA->Shape;
+    shape* B = BodyB->Shape;
+    v2 AAxis, BAxis;
+    v2 APoint, BPoint;
+
+    r32 ABSeparation = FindMinSeparation(A, B, AAxis, APoint);
+    r32 BASeparation = FindMinSeparation(B, A, BAxis, BPoint);
+
+    b32 Result = ABSeparation < 0.0f && BASeparation < 0.0f;
+
+    if(Result)
+    {
+        ContactInfo->A = BodyA;
+        ContactInfo->B = BodyB;
+        if (ABSeparation > BASeparation)
+        {
+            ContactInfo->Depth  = -ABSeparation;
+            ContactInfo->Normal =  Normal(AAxis);
+            ContactInfo->Start  =  APoint;
+            ContactInfo->End    =  APoint + ContactInfo->Normal * ContactInfo->Depth;
+        }
+        else
+        {
+            ContactInfo->Depth  = -BASeparation;
+            ContactInfo->Normal = -Normal(BAxis);
+            ContactInfo->Start  =  BPoint - ContactInfo->Normal * ContactInfo->Depth;
+            ContactInfo->End    =  BPoint;
+        }
+
+    }
+
+    return Result;
+}
+
 void ResolvePenetration(contact* ContactInfo)
 {
-    if((fabsf(ContactInfo->A->InvMass) > 0.001) && (fabsf(ContactInfo->B->InvMass) > 0.001))
+    body* A = ContactInfo->A;
+    body* B = ContactInfo->B;
+    if(!A->IsStatic() && !B->IsStatic())
     {
-        r32 da = ContactInfo->Depth/(ContactInfo->A->InvMass + ContactInfo->B->InvMass)*ContactInfo->A->InvMass;
-        r32 db = ContactInfo->Depth/(ContactInfo->A->InvMass + ContactInfo->B->InvMass)*ContactInfo->B->InvMass;
+        r32 da = ContactInfo->Depth/(A->InvMass + B->InvMass)*A->InvMass;
+        r32 db = ContactInfo->Depth/(A->InvMass + B->InvMass)*B->InvMass;
 
-        ContactInfo->A->d -= da;
-        ContactInfo->B->d += db;
+        ContactInfo->A->d -= ContactInfo->Normal*da*0.8f;
+        ContactInfo->B->d += ContactInfo->Normal*db*0.8f;
+
+        A->Shape->UpdateVertices(A->d, A->Rotation);
+        B->Shape->UpdateVertices(A->d, A->Rotation);
     }
 }
 
+// NOTE: There is somewhere an error
+// Body should not be sinking!!!
 void ResolveCollision(contact* ContactInfo)
 {
     ResolvePenetration(ContactInfo);
-
     body* A = ContactInfo->A;
     body* B = ContactInfo->B;
+    v2 Norm  = ContactInfo->Normal;
 
     r32 e = Min(A->Restitution, B->Restitution);
+    r32 f = Min(A->Friction, B->Friction);
 
-    v2 RelativeVelocity = (A->dP - B->dP);
+    v2 ra = ContactInfo->End   - A->d;
+    v2 rb = ContactInfo->Start - B->d;
+    v2 va = A->dP + Cross(V3(0, 0, A->AngularVelocity), V3(ra, 0)).xy; 
+    v2 vb = B->dP + Cross(V3(0, 0, B->AngularVelocity), V3(rb, 0)).xy; 
 
-    r32 ImpulseMagnitude = -(1 + e) * Inner(ContactInfo->Normal, RelativeVelocity) / (A->InvMass + B->InvMass);
-    v2  ImpulseDirection = ContactInfo->Normal;
+    v2  RelativeVelocity = va - vb;
+    r32 RelativeVelocityDotN = Inner(RelativeVelocity,  Norm);
+
+    r32 Denom = A->InvMass + B->InvMass + Square(Cross(ra, Norm)) * A->InvI + Square(Cross(rb, Norm)) * B->InvI;
+    r32 ImpulseMagnitude = -(1 + e) * RelativeVelocityDotN / Denom;
+    v2  ImpulseDirection =  Norm;
 
     v2 Jn = ImpulseDirection * ImpulseMagnitude;
 
-    A->ApplyImpulse(Jn);
-    B->ApplyImpulse(-Jn);
+    // Friction
+
+    v2 Tangent = Normal(Norm);
+    r32 RelativeVelocityDotT = Inner(RelativeVelocity, Tangent);
+
+    r32 DenomT = A->InvMass + B->InvMass + Square(Cross(ra, Tangent)) * A->InvI + Square(Cross(rb, Tangent)) * B->InvI;
+    r32 ImpulseMagnitudeT = -1.0f*f*(1 + e) * RelativeVelocityDotT / DenomT;
+    v2  ImpulseDirectionT = Tangent;
+
+    v2 Jt = ImpulseDirectionT * ImpulseMagnitudeT;
+
+    v2 J = Jn + Jt;
+
+    A->ApplyImpulse( J, ra);
+    B->ApplyImpulse(-J, rb);
 }
+

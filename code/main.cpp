@@ -11,6 +11,8 @@ i32 PreviousFrameTime = 0;
 r32 DeltaTime = 0;
 r32 TimeForFrame = 0;
 r32 dtForFrame = 0;
+b32 CreatingPolygon = false;
+std::vector<v2> MousePolygon;
 
 world World;
 
@@ -27,8 +29,14 @@ setup(void)
     World.Anchor = V2(ColorBuffer->Width / 2, 30);
     World.SpringTightness = 3000;
     World.SpringRestLength = 200;
-    World.Bodies.push_back(new body(V2(150, 150), 1.0, new shape(50, 50, 23)));
-    World.Bodies.push_back(new body(V2(300, 300), 1.0, new shape(50, 50, 23)));
+    World.Bodies.push_back(new body(V2(ColorBuffer->Width - 100, ColorBuffer->Height - 50), 0.0f, new shape(ColorBuffer->Width - 200, 50)));
+    World.Bodies.push_back(new body(V2(ColorBuffer->Width / 2 + 100, ColorBuffer->Height / 2 + 100), 0.0f, new shape(200, 200, 100)));
+    //World.Bodies.push_back(new body(V2(ColorBuffer->Width / 2, ColorBuffer->Height / 2), 1.0f, new shape(50, 50, 23)));
+
+    World.Bodies[0]->Rotation = 0.0;
+    World.Bodies[0]->Restitution = 0.5;
+    World.Bodies[1]->Rotation = 1.4;
+    World.Bodies[1]->Restitution = 0.5;
     
     World.PushForce = V2(0, 0);
 
@@ -53,20 +61,66 @@ process_input(void)
             if(event.key.keysym.sym == SDLK_DOWN)  World.PushForce.y =  25;
             if(event.key.keysym.sym == SDLK_LEFT)  World.PushForce.x = -25;
             if(event.key.keysym.sym == SDLK_RIGHT) World.PushForce.x =  25;
+            if(event.key.keysym.sym == SDLK_r)     CreatingPolygon   =  true;
             break;
         case SDL_KEYUP:
             if(event.key.keysym.sym == SDLK_UP)    World.PushForce.y = 0;
             if(event.key.keysym.sym == SDLK_DOWN)  World.PushForce.y = 0;
             if(event.key.keysym.sym == SDLK_LEFT)  World.PushForce.x = 0;
             if(event.key.keysym.sym == SDLK_RIGHT) World.PushForce.x = 0;
+            if(event.key.keysym.sym == SDLK_r)     
+            {
+                CreatingPolygon = false;
+                //body* Body = new body(MousePolygon[0], 1.0f, new shape(50, 50, MousePolygon));
+                //World.Bodies.push_back(Body);
+            }
             break;
         case SDL_MOUSEBUTTONDOWN:
-            if(event.button.button == SDL_BUTTON_LEFT)
+            {
+                if(event.button.button == SDL_BUTTON_LEFT)
+                {
+                    i32 MouseX, MouseY;
+                    SDL_GetMouseState(&MouseX, &MouseY);
+#if 0
+                    if(CreatingPolygon)
+                    {
+                        MousePolygon.push_back(V2(MouseX, MouseY));
+                    }
+                    else
+                    {
+                        MousePolygon.clear();
+                        body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, 23));
+                        World.Bodies.push_back(NewBody);
+                    }
+#endif
+                    if(CreatingPolygon)
+                    {
+                        std::vector<v2> Vertices = 
+                        {
+                            V2(20, 60),
+                            V2(-40, 20),
+                            V2(-20, -60),
+                            V2(20, -60),
+                            V2(40, 20)
+                        };
+                        body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, Vertices));
+                        NewBody->Restitution = 0.1f;
+                        NewBody->Friction = 0.7f;
+                        World.Bodies.push_back(NewBody);
+                    }
+                    else
+                    {
+                        body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, 23));
+                        World.Bodies.push_back(NewBody);
+                    }
+                }
+            } break;
+        case SDL_MOUSEMOTION:
             {
                 i32 MouseX, MouseY;
                 SDL_GetMouseState(&MouseX, &MouseY);
-                World.Bodies.push_back(new body(V2(MouseX, MouseY), 5.0f, new shape(50, 50, 23)));
-            }
+                //World.Bodies[2]->d = V2(MouseX, MouseY) - V2(World.Bodies[2]->Shape->Width / 2, World.Bodies[2]->Shape->Height / 2);
+            } break;
     }
 }
 
@@ -86,67 +140,44 @@ update(void)
     PreviousFrameTime = SDL_GetTicks();
 
     // Bodies update
-
-    for(body* Body : World.Bodies)
+    for(u32 AIndex = 0; 
+        AIndex <= World.Bodies.size() - 1;
+        ++AIndex)
     {
-        for(body* BodyCollider : World.Bodies)
+        for(u32 BIndex = AIndex + 1;
+            BIndex < World.Bodies.size();
+            ++BIndex)
         {
-            if(Body != BodyCollider)
+            body* A = World.Bodies[AIndex];
+            body* B = World.Bodies[BIndex];
+
+            contact Contact = {};
+            //if(A != B)
             {
-                contact Contact = {};
-                if (IsColliding(Body, BodyCollider, &Contact))
+                if (IsColliding(A, B, &Contact))
                 {
-                    Body->IsColliding = true;
-                    BodyCollider->IsColliding = true;
+                    ResolveCollision(&Contact);
+
+                    A->IsColliding = true;
+                    B->IsColliding = true;
 
                     DrawFilledCircle(Contact.Start - 2, 6, 6, 2, 0xFFFFFF00);
                     DrawFilledCircle(Contact.End - 2, 6, 6, 2, 0xFFFFFF00);
-                    DrawLine(ColorBuffer, Contact.End, Contact.Start, 0xFFFFFF00);
-                    ResolveCollision(&Contact);
+                    DrawLine(ColorBuffer, Contact.Start, Contact.Start + Contact.Normal * 15, 0xFFFFFF00);
                 }
                 else
                 {
-                    Body->IsColliding = false;
-                    BodyCollider->IsColliding = false;
+                    A->IsColliding = false;
+                    B->IsColliding = false;
                 }
             }
         }
-        Body->AddForce(V2(0.0f, 9.8f*Body->Mass));
-        //Body->AddForce(World.PushForce);
-        Body->AddForce(GenerateDragForce(*Body, 0.002));
-        //Body->AddTorque(100/PixelsPerMeter);
-        Body->Update(DeltaTime);
+    }
 
-        switch(Body->Shape->Type)
-        {
-            case ShapeType_Circle:
-            {
-                if((Body->d.x) <= 0)
-                {
-                    v2 Normal = V2(1, 0);
-                    Body->dP.x *= -1;
-                    Body->d.x = 0;
-                }
-                else if((Body->d.x + 2.0f*Body->Shape->Radius) >= ColorBuffer->Width)
-                {
-                    v2 Normal = V2(-1, 0);
-                    Body->dP.x *= -1;
-                    Body->d.x = ColorBuffer->Width - 2.0f*Body->Shape->Radius;
-                }
-                if((Body->d.y) <= 0)
-                {
-                    v2 Normal = V2(0, 1);
-                    Body->dP.y *= -1;
-                    Body->d.y = 0;
-                }
-                else if((Body->d.y + 2.0f*Body->Shape->Radius) >= ColorBuffer->Height)
-                {
-                    v2 Normal = V2(0, -1);
-                    Body->dP.y *= -1;
-                    Body->d.y = ColorBuffer->Height - 2.0f*Body->Shape->Radius;
-                }
-            } break;
-        }
+    for(body* Body : World.Bodies)
+    {
+        Body->AddForce(V2(0.0f, 9.8f*Body->Mass));
+        Body->Update(DeltaTime);
     }
 }
 
@@ -160,11 +191,11 @@ render(void)
 
     for(body* Body : World.Bodies)
     {
+        u32 Color = Body->IsColliding ? 0xFFFF0000 : 0xFFFFFFFF;
         switch(Body->Shape->Type)
         {
             case ShapeType_Circle:
             {
-                u32 Color = Body->IsColliding ? 0xFFFF0000 : 0xFFFFFFFF;
                 // NOTE: Warning!!! It is rotating around Body->d!!!!
                 // It should rotate around Texture Origin.
                 // If I just change the axes with rotating, then it will 
@@ -174,11 +205,11 @@ render(void)
             } break;
             case ShapeType_Polygon:
             {
-                DrawPolygon(Body->d, Body->Shape->WorldVertices, 0xFFFFFFFF);
+                DrawPolygon(Body->d, Body->Shape->WorldVertices, Color);
             } break;
             case ShapeType_Box:
             {
-                DrawPolygon(Body->d, Body->Shape->WorldVertices, 0xFFFFFFFF);
+                DrawPolygon(Body->d, Body->Shape->WorldVertices, Color);
             }
         }
     }

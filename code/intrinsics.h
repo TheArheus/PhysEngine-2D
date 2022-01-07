@@ -15,7 +15,7 @@ typedef float       r32;
 typedef double      r64;
 typedef int32_t     b32;
 
-#define FPS 30
+#define FPS 60
 #define FRAME_TARGET_TIME (1000/FPS)
 
 #define Min(a, b) ((a < b) ? a : b)

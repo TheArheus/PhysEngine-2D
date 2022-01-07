@@ -153,6 +153,7 @@ DrawRotRect(texture_t* RenderBuffer, v2 Origin, v2 XAxis, v2 YAxis, u32 color, t
     v4 UnpackedColor = Unpack4x8ColorARGB(color);
     UnpackedColor.xyz *= UnpackedColor.w;
 
+    //Origin = Origin - V2(XAxis.x/2, YAxis.y/2);
     v2 Ps[] = {Origin, Origin + XAxis, Origin + XAxis + YAxis, Origin + YAxis};
     for(u32 PIndex = 0;
         PIndex < 4;
@@ -328,7 +329,7 @@ DrawCircle(v2 P, u32 Width, u32 Height, r32 Radius, r32 Rotation, u32 Color)
     i32 X = 0;
     i32 Y = (i32)Radius;
     i32 d = 3 - 2*(i32)Radius;
-    CirclePoints(&CircleTexture, TextureOrigin, V2i(X, Y), Color);
+    CirclePoints(ColorBuffer, P, V2i(X, Y), Color);
     while(X <= Y)
     {
         if(d <= 0)
@@ -341,18 +342,20 @@ DrawCircle(v2 P, u32 Width, u32 Height, r32 Radius, r32 Rotation, u32 Color)
             Y--;
         }
         X++;
-        CirclePoints(&CircleTexture, TextureOrigin, V2i(X, Y), Color);
+        CirclePoints(ColorBuffer, P, V2i(X, Y), Color);
     }
-    DrawLine(&CircleTexture, TextureOrigin, V2(TextureOrigin.x + Radius, TextureOrigin.y), Color);
+    v2 LineMax = V2(Radius, 0.0f);
+    LineMax = P + rotate(LineMax, Rotation);
+    DrawLine(ColorBuffer, P, LineMax, Color);
 
-    v2 XAxis = Width*V2(1, 0);
-    v2 YAxis = Height*V2(0, 1);
+    //v2 XAxis = Width*V2(1, 0);
+    //v2 YAxis = Height*V2(0, 1);
 
     // TODO: Make it rotate around TextureOrigin and not around P;
-    XAxis = rotate(XAxis, Rotation);
-    YAxis = rotate(YAxis, Rotation);
+    //XAxis = rotate(XAxis, Rotation);
+    //YAxis = rotate(YAxis, Rotation);
 
-    DrawRotRect(ColorBuffer, P, XAxis, YAxis, Color, &CircleTexture);
+    //DrawRotRect(ColorBuffer, P, XAxis, YAxis, Color, &CircleTexture);
 }
 
 void
