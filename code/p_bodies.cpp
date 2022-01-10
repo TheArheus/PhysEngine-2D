@@ -42,46 +42,48 @@ body::~body()
 {
 }
 
-void body::IntegrateLinear(r32 DeltaTime)
-{
-    if(!IsStatic())
-    {
-        this->ddP = this->SumForces * this->InvMass;
-        this->dP += this->ddP*DeltaTime;
-        this->d  += this->dP*DeltaTime;
-        ClearForces();
-    }
-}
-
-void body::IntegrateAngular(r32 DeltaTime)
+void body::
+IntegrateForces(r32 DeltaTime)
 {
     if (!IsStatic())
     {
-        this->AngularAcceleration = this->SumTorque * this->InvI;
-        this->AngularVelocity += this->AngularAcceleration * DeltaTime;
-        this->Rotation += this->AngularVelocity * DeltaTime;
+        ddP = SumForces * InvMass;
+        dP += ddP * DeltaTime;
+
+        AngularAcceleration = SumTorque * InvI;
+        AngularVelocity += AngularAcceleration * DeltaTime;
+
+        ClearForces();
         ClearTorque();
     }
 }
 
-void body::Update(r32 DeltaTime)
+void body::
+IntegrateVelocities(r32 DeltaTime)
 {
-    IntegrateLinear(DeltaTime);
-    IntegrateAngular(DeltaTime);
-    Shape->UpdateVertices(d, Rotation);
+    if (!IsStatic())
+    {
+        d += dP*DeltaTime;
+        Rotation += AngularVelocity * DeltaTime;
+
+        Shape->UpdateVertices(d, Rotation);
+    }
 }
 
-void body::AddForce(const v2& Force)
+void body::
+AddForce(const v2& Force)
 {
     this->SumForces += Force*PixelsPerMeter;
 }
 
-void body::AddTorque(r32 Torque)
+void body::
+AddTorque(r32 Torque)
 {
     this->SumTorque += Torque*PixelsPerMeter;
 }
 
-void body::ApplyImpulse(v2 Impulse)
+void body::
+ApplyImpulseLinear(v2 Impulse)
 {
     if (!IsStatic())
     {
@@ -89,7 +91,17 @@ void body::ApplyImpulse(v2 Impulse)
     }
 }
 
-void body::ApplyImpulse(v2 Impulse, v2 Radius)
+void body::
+ApplyImpulseAngular(r32 Impulse)
+{
+    if (!IsStatic())
+    {
+        AngularVelocity += Impulse * InvI;
+    }
+}
+
+void body::
+ApplyImpulseAtPoint(v2 Impulse, v2 Radius)
 {
     if (!IsStatic())
     {
@@ -98,20 +110,42 @@ void body::ApplyImpulse(v2 Impulse, v2 Radius)
     }
 }
 
-void body::ClearForces()
+void body::
+ClearForces()
 {
     this->SumForces = V2(0.0, 0.0);
 }
 
-void body::ClearTorque()
+void body::
+ClearTorque()
 {
     this->SumTorque = 0.0f;
 }
 
-b32 body::IsStatic()
+b32 body::
+IsStatic()
 {
     r32 Epsilon = 0.005f;
     b32 Result = fabsf(InvMass) < Epsilon;
+    return Result;
+}
+
+v2 body::
+LocalSpaceToWorldSpace(v2 P)
+{
+    v2 Result = P;
+    Result = rotate(Result, Rotation);
+    Result += d;
+    return Result;
+}
+
+v2 body::
+WorldSpaceToLocalSpace(v2 P)
+{
+    v2 Result = P;
+    Result = Result - this->d;
+    Result.x = cosf(-Rotation) * Result.x - sinf(-Rotation) * Result.y;
+    Result.y = cosf(-Rotation) * Result.y + sinf(-Rotation) * Result.x;
     return Result;
 }
 
@@ -176,7 +210,8 @@ v2 GenerateSpringForce(const body& BodyA, const body& BodyB, r32 RestLength, r32
     return SpringForce;
 }
 
-shape::shape(r32 Width, r32 Height)
+shape::
+shape(r32 Width, r32 Height)
 {
     this->Width = Width;
     this->Height = Height;
@@ -190,7 +225,8 @@ shape::shape(r32 Width, r32 Height)
     this->WorldVertices.resize(this->LocalVertices.size());
 }
 
-shape::shape(r32 Width, r32 Height, r32 Radius)
+shape::
+shape(r32 Width, r32 Height, r32 Radius)
 {
     this->Radius = Radius;
     this->Width = Width;
@@ -198,7 +234,8 @@ shape::shape(r32 Width, r32 Height, r32 Radius)
     this->Type = ShapeType_Circle;
 }
 
-shape::shape(r32 Width, r32 Height, std::vector<v2> Vertices)
+shape::
+shape(r32 Width, r32 Height, std::vector<v2> Vertices)
 {
     this->LocalVertices = Vertices;
     this->Width = Width;
@@ -212,7 +249,8 @@ shape::~shape()
 {
 }
 
-void shape::UpdateVertices(v2 P, r32 Rotation)
+void shape::
+UpdateVertices(v2 P, r32 Rotation)
 {
     if(Type == ShapeType_Box || Type == ShapeType_Polygon)
     {
@@ -228,7 +266,8 @@ void shape::UpdateVertices(v2 P, r32 Rotation)
     }
 }
 
-r32 shape::GetMomentOfInertia()
+r32 shape::
+GetMomentOfInertia()
 {
     r32 Result = 0.0;
     switch(this->Type)
@@ -497,8 +536,8 @@ void ResolvePenetration(contact* ContactInfo)
         r32 da = ContactInfo->Depth/(A->InvMass + B->InvMass)*A->InvMass;
         r32 db = ContactInfo->Depth/(A->InvMass + B->InvMass)*B->InvMass;
 
-        ContactInfo->A->d -= ContactInfo->Normal*da*0.8f;
-        ContactInfo->B->d += ContactInfo->Normal*db*0.8f;
+        ContactInfo->A->d -= ContactInfo->Normal*da;
+        ContactInfo->B->d += ContactInfo->Normal*db;
 
         A->Shape->UpdateVertices(A->d, A->Rotation);
         B->Shape->UpdateVertices(A->d, A->Rotation);
@@ -544,7 +583,7 @@ void ResolveCollision(contact* ContactInfo)
 
     v2 J = Jn + Jt;
 
-    A->ApplyImpulse( J, ra);
-    B->ApplyImpulse(-J, rb);
+    A->ApplyImpulseAtPoint( J, ra);
+    B->ApplyImpulseAtPoint(-J, rb);
 }
 

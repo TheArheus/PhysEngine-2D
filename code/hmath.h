@@ -45,6 +45,18 @@ union v4
     r32 E[4];
 };
 
+struct vN
+{
+    u32 N;
+    r32* Values;
+};
+
+struct mNxM
+{
+    u32 M;
+    vN* Vectors;
+};
+
 inline r32
 Lerp(r32 A, r32 t, r32 B)
 {
@@ -267,6 +279,127 @@ V4i(i32 X, i32 Y, i32 Z, i32 W)
     Result.y = (r32)Y;
     Result.z = (r32)Z;
     Result.w = (r32)W;
+
+    return Result;
+}
+
+inline vN
+VN(r32 Size)
+{
+    vN Result = {};
+
+    Result.N = Size;
+    Result.Values = (r32*)calloc(sizeof(r32),Size);
+
+    return Result;
+}
+
+inline vN
+VN(v2 V)
+{
+    vN Result = {};
+
+    Result.N = 2;
+    Result.Values = (r32*)malloc(sizeof(r32)*Result.N);
+
+    Result.Values[0] = V.x;
+    Result.Values[1] = V.y;
+
+    return Result;
+}
+
+inline vN
+VN(v3 V)
+{
+    vN Result = {};
+
+    Result.N = 3;
+    Result.Values = (r32*)malloc(sizeof(r32)*Result.N);
+
+    Result.Values[0] = V.x;
+    Result.Values[1] = V.y;
+    Result.Values[2] = V.z;
+
+    return Result;
+}
+
+inline vN
+VN(v4 V)
+{
+    vN Result = {};
+
+    Result.N = 4;
+    Result.Values = (r32*)malloc(sizeof(r32)*Result.N);
+
+    Result.Values[0] = V.x;
+    Result.Values[1] = V.y;
+    Result.Values[2] = V.z;
+    Result.Values[3] = V.w;
+
+    return Result;
+}
+
+inline vN
+VN(mNxM V)
+{
+    vN Result = {};
+
+    if(V.M != 1)
+    {
+        Result.N = V.M;
+        Result.Values = (r32*)malloc(sizeof(r32) * Result.N);
+
+        for(u32 Index = 0;
+            Index < Result.N;
+            ++Index)
+        {
+            Result.Values[Index] = V.Vectors[Index].Values[0];
+        }
+    }
+    else
+    {
+        Result.N = V.Vectors->N;
+        Result.Values = (r32*)malloc(sizeof(r32)*Result.N);
+
+        for(u32 Index = 0;
+            Index < Result.N;
+            ++Index)
+        {
+            Result.Values[Index] = V.Vectors->Values[Index];
+        }
+    }
+
+    return Result;
+}
+
+inline mNxM
+MNxM(u32 N, u32 M)
+{
+    // NOTE: M is Columns
+    // N is rows
+    mNxM Result = {};
+
+    Result.M = M;
+    Result.Vectors = (vN*)calloc(sizeof(vN),M);
+
+    for(u32 VectorIndex = 0;
+        VectorIndex < M;
+        ++VectorIndex)
+    {
+        Result.Vectors[VectorIndex].N = N;
+        Result.Vectors[VectorIndex].Values = (r32*)calloc(sizeof(r32), N);
+    }
+
+    return Result;
+}
+
+inline mNxM
+MNxM(vN V)
+{
+    mNxM Result = {};
+
+    Result.M = 1;
+    Result.Vectors = &V;
 
     return Result;
 }
@@ -968,5 +1101,365 @@ struct rectangle2
     v2 Min;
     v2 Max;
 };
+
+// Operators Vector size N
+
+inline vN 
+operator+(vN A, vN B)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = A.Values[Index] + B.Values[Index];
+    }
+
+    return Result;
+}
+
+inline vN
+operator+(vN A, r32 B)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = A.Values[Index] + B;
+    }
+
+    return Result;
+}
+
+inline vN
+operator+(r32 A, vN B)
+{
+    B = B + A;
+
+    return B;
+}
+
+inline vN&
+operator+=(vN& A, vN B)
+{
+    A = A + B;
+
+    return A;
+}
+
+inline vN&
+operator+=(vN& A, r32 B)
+{
+    A = A + B;
+
+    return A;
+}
+
+inline vN 
+operator-(vN A, vN B)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = A.Values[Index] - B.Values[Index];
+    }
+
+    return Result;
+}
+
+inline vN
+operator-(vN A, r32 B)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = A.Values[Index] - B;
+    }
+
+    return Result;
+}
+
+inline vN
+operator-(r32 A, vN B)
+{
+    B = B - A;
+
+    return B;
+}
+
+inline vN
+operator-(vN A)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = -A.Values[Index];
+    }
+
+    return Result;
+}
+
+inline vN&
+operator-=(vN& A, vN B)
+{
+    A = A - B;
+
+    return A;
+}
+
+inline vN&
+operator-=(vN& A, r32 B)
+{
+    A = A - B;
+
+    return A;
+}
+
+inline vN
+operator*(vN A, vN B)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = A.Values[Index] * B.Values[Index];
+    }
+
+    return Result;
+}
+
+inline vN
+operator*(vN A, r32 B)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = A.Values[Index] * B;
+    }
+
+    return Result;
+}
+
+inline vN
+operator*(r32 A, vN B)
+{
+    B = B*A;
+
+    return B;
+}
+
+inline vN&
+operator*=(vN& A, vN B)
+{
+    A = A*B;
+
+    return A;
+}
+
+inline vN&
+operator*=(vN& A, r32 B)
+{
+    A = A * B;
+
+    return A;
+}
+
+inline vN
+operator/(vN A, vN B)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = A.Values[Index] / B.Values[Index];
+    }
+
+    return Result;
+}
+
+inline vN
+operator/(vN A, r32 B)
+{
+    vN Result = {};
+    Result.Values = (r32*)malloc(sizeof(r32)*A.N);
+    Result.N = A.N;
+
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result.Values[Index] = A.Values[Index] / B;
+    }
+
+    return Result;
+}
+
+inline vN
+operator/(r32 A, vN B)
+{
+    B = B / A;
+    return B;
+}
+
+inline r32
+Inner(vN A, vN B)
+{
+    r32 Result = 0.0f;
+    for(u32 Index = 0;
+        Index < A.N;
+        ++Index)
+    {
+        Result += A.Values[Index] * B.Values[Index];
+    }
+    return Result;
+}
+
+inline r32
+LengthSqr(vN A)
+{
+    r32 Result = Inner(A, A);
+    return Result;
+}
+
+inline r32
+Length(vN A)
+{
+    r32 Result = SquareRoot(LengthSqr(A));
+    return Result;
+}
+
+inline mNxM
+Transpose(mNxM M)
+{
+    mNxM Result = MNxM(M.M, M.Vectors->N);
+    for(u32 Cols = 0;
+        Cols < M.Vectors->N;
+        ++Cols)
+    {
+        for(u32 Rows = 0;
+            Rows < M.M;
+            ++Rows)
+        {
+            Result.Vectors[Cols].Values[Rows] = M.Vectors[Rows].Values[Cols];
+        }
+    }
+
+    return Result;
+}
+
+inline vN
+SolveGaussSeidel(mNxM A, vN B)
+{
+    r32 N = B.N;
+    vN Result = VN(N);
+    
+    for(u32 Iterations = 0;
+        Iterations < N;
+        ++Iterations)
+    {
+        for(u32 Index = 0;
+            Index < N;
+            ++Index)
+        {
+            if(A.Vectors[Index].Values[Index] != 0.0f)
+            {
+                Result.Values[Index] += (B.Values[Index] / A.Vectors[Index].Values[Index] - (Inner(A.Vectors[Index], Result) / A.Vectors[Index].Values[Index]));
+            }
+        }
+    }
+
+    return Result;
+}
+
+inline vN
+operator*(mNxM M, vN V)
+{
+    vN Result = VN(M.Vectors->N);
+    if(V.N == M.M)
+    {
+        for(u32 Index = 0;
+            Index < M.Vectors->N;
+            ++Index)
+        {
+            if(V.N == 1)
+            {
+                for(u32 RowIndex = 0;
+                    RowIndex < M.M;
+                    ++RowIndex)
+                {
+                    Result.Values[Index] = M.Vectors[RowIndex].Values[Index] * V.Values[0];
+                }
+            }
+            else
+            {
+                Result.Values[Index] = Inner(VN(M), V);
+            }
+        }
+    }
+
+    return Result;
+};
+
+inline mNxM
+operator*(mNxM A, mNxM B)
+{
+    mNxM Result = MNxM(A.Vectors->N, B.M);
+    if (A.M == B.Vectors->N)
+    {
+        for(u32 Rows = 0;
+            Rows < A.Vectors->N;
+            ++Rows)
+        {
+            for(u32 Cols = 0;
+                Cols < B.M;
+                ++Cols)
+            {
+                for(u32 Index = 0;
+                    Index < A.M;
+                    ++Index)
+                {
+                    Result.Vectors[Cols].Values[Rows] += A.Vectors[Index].Values[Rows] * B.Vectors[Cols].Values[Index];
+                }
+            }
+        }
+    }
+
+    return Result;
+}
 
 #endif

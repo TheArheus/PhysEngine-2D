@@ -20,6 +20,7 @@ extern texture_t*       ColorBuffer;
 
 #include "hmath.h"
 #include "p_bodies.h"
+#include "constraint.h"
 #include "world.h"
 
 bool InitWindow();

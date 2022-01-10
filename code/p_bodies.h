@@ -54,16 +54,23 @@ struct body
     body(v2 P, r32 Mass, shape* Shape);
     ~body();
 
-    void IntegrateLinear(r32 DeltaTime);
-    void IntegrateAngular(r32 DeltaTime);
-    void Update(r32 DeltaTime);
+    void IntegrateForces(r32 DeltaTime);
+    void IntegrateVelocities(r32 DeltaTime);
+
     void AddForce(const v2& Force);
     void AddTorque(r32 Torque);
-    void ApplyImpulse(v2 Impulse);
-    void ApplyImpulse(v2 Impulse, v2 Distance);
+
+    void ApplyImpulseLinear(v2 Impulse);
+    void ApplyImpulseAngular(r32 Impulse);
+    void ApplyImpulseAtPoint(v2 Impulse, v2 Distance);
+
     void ClearForces();
     void ClearTorque();
+
     b32 IsStatic();
+
+    v2 LocalSpaceToWorldSpace(v2 P);
+    v2 WorldSpaceToLocalSpace(v2 P);
 };
 
 struct contact 

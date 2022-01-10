@@ -4,6 +4,8 @@
 #include <SDL2/SDL.h>
 #include "display.h"
 #include "p_bodies.cpp"
+#include "constraint.cpp"
+#include "world.cpp"
 
 bool is_running;
 
@@ -14,10 +16,8 @@ r32 dtForFrame = 0;
 b32 CreatingPolygon = false;
 std::vector<v2> MousePolygon;
 
-world World;
-
 static void 
-setup(void)
+setup(world* World)
 {
     ColorBuffer->Memory = (u32*)malloc(sizeof(u32)*ColorBuffer->Width*ColorBuffer->Height);
 
@@ -26,26 +26,37 @@ setup(void)
                                 ColorBuffer->Width, ColorBuffer->Height);
 
     TimeForFrame = 1.0f / FPS;
-    World.Anchor = V2(ColorBuffer->Width / 2, 30);
-    World.SpringTightness = 3000;
-    World.SpringRestLength = 200;
-    World.Bodies.push_back(new body(V2(ColorBuffer->Width - 100, ColorBuffer->Height - 50), 0.0f, new shape(ColorBuffer->Width - 200, 50)));
-    World.Bodies.push_back(new body(V2(ColorBuffer->Width / 2 + 100, ColorBuffer->Height / 2 + 100), 0.0f, new shape(200, 200, 100)));
-    //World.Bodies.push_back(new body(V2(ColorBuffer->Width / 2, ColorBuffer->Height / 2), 1.0f, new shape(50, 50, 23)));
+    World->Anchor = V2(ColorBuffer->Width / 2, 30);
+    World->SpringTightness = 3000;
+    World->SpringRestLength = 200;
+#if 0
+    World->Bodies.push_back(new body(V2(ColorBuffer->Width - 100, ColorBuffer->Height - 50), 0.0f, new shape(ColorBuffer->Width - 200, 50)));
+    World->Bodies.push_back(new body(V2(ColorBuffer->Width / 2 + 100, ColorBuffer->Height / 2 + 100), 0.0f, new shape(200, 200)));
+    //World->Bodies.push_back(new body(V2(ColorBuffer->Width / 2, ColorBuffer->Height / 2), 1.0f, new shape(50, 50, 23)));
+#else
+    body* A = new body(V2(ColorBuffer->Width / 2, ColorBuffer->Height / 2), 0.0f, new shape(70, 70, 30));
+    body* B = new body(V2(A->d.x - 50, A->d.y), 1.0f, new shape(40, 40, 18));
+    World->Bodies.push_back(A);
+    World->Bodies.push_back(B);
 
-    World.Bodies[0]->Rotation = 0.0;
-    World.Bodies[0]->Restitution = 0.5;
-    World.Bodies[1]->Rotation = 1.4;
-    World.Bodies[1]->Restitution = 0.5;
+    constraint* Joint = (constraint*)malloc(sizeof(constraint));
+    Joint->JointConstraint(A, B, A->d);
+    World->Constraints.push_back(Joint);
+#endif
+
+    World->Bodies[0]->Rotation = 0.0;
+    World->Bodies[0]->Restitution = 0.5;
+    World->Bodies[1]->Rotation = 1.4;
+    World->Bodies[1]->Restitution = 0.5;
     
-    World.PushForce = V2(0, 0);
+    World->PushForce = V2(0, 0);
 
-    World.Liquid.Min = V2(0, 0.5*ColorBuffer->Height);
-    World.Liquid.Max = V2(ColorBuffer->Width, ColorBuffer->Height);
+    World->Liquid.Min = V2(0, 0.5*ColorBuffer->Height);
+    World->Liquid.Max = V2(ColorBuffer->Width, ColorBuffer->Height);
 }
 
 static void 
-process_input(void)
+process_input(world* World)
 {
     SDL_Event event;
     SDL_PollEvent(&event);
@@ -57,22 +68,22 @@ process_input(void)
             break;
         case SDL_KEYDOWN:
             if(event.key.keysym.sym == SDLK_ESCAPE) is_running = false;
-            if(event.key.keysym.sym == SDLK_UP)    World.PushForce.y = -25;
-            if(event.key.keysym.sym == SDLK_DOWN)  World.PushForce.y =  25;
-            if(event.key.keysym.sym == SDLK_LEFT)  World.PushForce.x = -25;
-            if(event.key.keysym.sym == SDLK_RIGHT) World.PushForce.x =  25;
+            if(event.key.keysym.sym == SDLK_UP)    World->PushForce.y = -25;
+            if(event.key.keysym.sym == SDLK_DOWN)  World->PushForce.y =  25;
+            if(event.key.keysym.sym == SDLK_LEFT)  World->PushForce.x = -25;
+            if(event.key.keysym.sym == SDLK_RIGHT) World->PushForce.x =  25;
             if(event.key.keysym.sym == SDLK_r)     CreatingPolygon   =  true;
             break;
         case SDL_KEYUP:
-            if(event.key.keysym.sym == SDLK_UP)    World.PushForce.y = 0;
-            if(event.key.keysym.sym == SDLK_DOWN)  World.PushForce.y = 0;
-            if(event.key.keysym.sym == SDLK_LEFT)  World.PushForce.x = 0;
-            if(event.key.keysym.sym == SDLK_RIGHT) World.PushForce.x = 0;
+            if(event.key.keysym.sym == SDLK_UP)    World->PushForce.y = 0;
+            if(event.key.keysym.sym == SDLK_DOWN)  World->PushForce.y = 0;
+            if(event.key.keysym.sym == SDLK_LEFT)  World->PushForce.x = 0;
+            if(event.key.keysym.sym == SDLK_RIGHT) World->PushForce.x = 0;
             if(event.key.keysym.sym == SDLK_r)     
             {
                 CreatingPolygon = false;
                 //body* Body = new body(MousePolygon[0], 1.0f, new shape(50, 50, MousePolygon));
-                //World.Bodies.push_back(Body);
+                //World->Bodies.push_back(Body);
             }
             break;
         case SDL_MOUSEBUTTONDOWN:
@@ -90,7 +101,7 @@ process_input(void)
                     {
                         MousePolygon.clear();
                         body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, 23));
-                        World.Bodies.push_back(NewBody);
+                        World->Bodies.push_back(NewBody);
                     }
 #endif
                     if(CreatingPolygon)
@@ -106,12 +117,12 @@ process_input(void)
                         body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, Vertices));
                         NewBody->Restitution = 0.1f;
                         NewBody->Friction = 0.7f;
-                        World.Bodies.push_back(NewBody);
+                        World->Bodies.push_back(NewBody);
                     }
                     else
                     {
                         body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, 23));
-                        World.Bodies.push_back(NewBody);
+                        World->Bodies.push_back(NewBody);
                     }
                 }
             } break;
@@ -119,13 +130,13 @@ process_input(void)
             {
                 i32 MouseX, MouseY;
                 SDL_GetMouseState(&MouseX, &MouseY);
-                //World.Bodies[2]->d = V2(MouseX, MouseY) - V2(World.Bodies[2]->Shape->Width / 2, World.Bodies[2]->Shape->Height / 2);
+                //World->Bodies[2]->d = V2(MouseX, MouseY) - V2(World->Bodies[2]->Shape->Width / 2, World->Bodies[2]->Shape->Height / 2);
             } break;
     }
 }
 
 static void 
-update(void)
+update(world* World)
 {
     dtForFrame += TimeForFrame;
     int TimeToWait = FRAME_TARGET_TIME - (SDL_GetTicks() + PreviousFrameTime);
@@ -140,56 +151,18 @@ update(void)
     PreviousFrameTime = SDL_GetTicks();
 
     // Bodies update
-    for(u32 AIndex = 0; 
-        AIndex <= World.Bodies.size() - 1;
-        ++AIndex)
-    {
-        for(u32 BIndex = AIndex + 1;
-            BIndex < World.Bodies.size();
-            ++BIndex)
-        {
-            body* A = World.Bodies[AIndex];
-            body* B = World.Bodies[BIndex];
-
-            contact Contact = {};
-            //if(A != B)
-            {
-                if (IsColliding(A, B, &Contact))
-                {
-                    ResolveCollision(&Contact);
-
-                    A->IsColliding = true;
-                    B->IsColliding = true;
-
-                    DrawFilledCircle(Contact.Start - 2, 6, 6, 2, 0xFFFFFF00);
-                    DrawFilledCircle(Contact.End - 2, 6, 6, 2, 0xFFFFFF00);
-                    DrawLine(ColorBuffer, Contact.Start, Contact.Start + Contact.Normal * 15, 0xFFFFFF00);
-                }
-                else
-                {
-                    A->IsColliding = false;
-                    B->IsColliding = false;
-                }
-            }
-        }
-    }
-
-    for(body* Body : World.Bodies)
-    {
-        Body->AddForce(V2(0.0f, 9.8f*Body->Mass));
-        Body->Update(DeltaTime);
-    }
+    World->Update(DeltaTime);
 }
 
 static void 
-render(void)
+render(world* World)
 {
 
     v2 P = {(r32)ColorBuffer->Width/2, (r32)ColorBuffer->Height/2};
 
-    //DrawRect(ColorBuffer, World.Liquid.Min, World.Liquid.Max, 0xFF83D7EE);
+    //DrawRect(ColorBuffer, World->Liquid.Min, World->Liquid.Max, 0xFF83D7EE);
 
-    for(body* Body : World.Bodies)
+    for(body* Body : World->Bodies)
     {
         u32 Color = Body->IsColliding ? 0xFFFF0000 : 0xFFFFFFFF;
         switch(Body->Shape->Type)
@@ -224,13 +197,15 @@ int main(int argc, char** argv)
 {
     is_running = InitWindow();
 
-    setup();
+    world* World = new world(-9.8f);
+
+    setup(World);
 
     while(is_running)
     {
-        process_input();
-        update();
-        render();
+        process_input(World);
+        update(World);
+        render(World);
     }
 
     DestroyWindow();
