@@ -29,25 +29,38 @@ setup(world* World)
     World->Anchor = V2(ColorBuffer->Width / 2, 30);
     World->SpringTightness = 3000;
     World->SpringRestLength = 200;
+
 #if 0
-    World->Bodies.push_back(new body(V2(ColorBuffer->Width - 100, ColorBuffer->Height - 50), 0.0f, new shape(ColorBuffer->Width - 200, 50)));
-    World->Bodies.push_back(new body(V2(ColorBuffer->Width / 2 + 100, ColorBuffer->Height / 2 + 100), 0.0f, new shape(200, 200)));
-    //World->Bodies.push_back(new body(V2(ColorBuffer->Width / 2, ColorBuffer->Height / 2), 1.0f, new shape(50, 50, 23)));
+    const int BodiesCount = 9;
+    for(u32 BodyIndex = 0;
+        BodyIndex < BodiesCount;
+        ++BodyIndex)
+    {
+        r32 Mass = (BodyIndex == 0) ? 0.0f : 1.0f;
+        body* NewBody = new body(V2(ColorBuffer->Width / 2 - (BodyIndex * 40), 100), Mass, new shape(30, 30));
+        World->Bodies.push_back(NewBody);
+    }
+
+    for(u32 BodyIndex = 0;
+        BodyIndex < BodiesCount - 1;
+        ++BodyIndex)
+    {
+        body* A = World->Bodies[BodyIndex];
+        body* B = World->Bodies[BodyIndex + 1];
+
+        constraint* NewConstraint = (constraint*)calloc(sizeof(constraint), 1);
+        NewConstraint->JointConstraint(A, B, A->d);
+        World->Constraints.push_back(NewConstraint);
+    }
 #else
-    body* A = new body(V2(ColorBuffer->Width / 2, ColorBuffer->Height / 2), 0.0f, new shape(70, 70, 30));
-    body* B = new body(V2(A->d.x - 50, A->d.y), 1.0f, new shape(40, 40, 18));
-    World->Bodies.push_back(A);
-    World->Bodies.push_back(B);
+    World->Bodies.push_back(new body(V2(ColorBuffer->Width - 100, ColorBuffer->Height - 50), 0.0f, new shape(ColorBuffer->Width - 200, 50)));
+    World->Bodies.push_back(new body(V2(ColorBuffer->Width / 2 + 100, ColorBuffer->Height / 2 + 100), 0.0f, new shape(200, 200, 100)));
 
-    constraint* Joint = (constraint*)malloc(sizeof(constraint));
-    Joint->JointConstraint(A, B, A->d);
-    World->Constraints.push_back(Joint);
-#endif
-
-    World->Bodies[0]->Rotation = 0.0;
+    //World->Bodies[0]->Rotation = 0.0;
     World->Bodies[0]->Restitution = 0.5;
-    World->Bodies[1]->Rotation = 1.4;
+    //World->Bodies[1]->Rotation = 1.4;
     World->Bodies[1]->Restitution = 0.5;
+#endif
     
     World->PushForce = V2(0, 0);
 
@@ -92,18 +105,7 @@ process_input(world* World)
                 {
                     i32 MouseX, MouseY;
                     SDL_GetMouseState(&MouseX, &MouseY);
-#if 0
-                    if(CreatingPolygon)
-                    {
-                        MousePolygon.push_back(V2(MouseX, MouseY));
-                    }
-                    else
-                    {
-                        MousePolygon.clear();
-                        body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, 23));
-                        World->Bodies.push_back(NewBody);
-                    }
-#endif
+
                     if(CreatingPolygon)
                     {
                         std::vector<v2> Vertices = 
@@ -115,7 +117,7 @@ process_input(world* World)
                             V2(40, 20)
                         };
                         body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, Vertices));
-                        NewBody->Restitution = 0.1f;
+                        NewBody->Restitution = 0.5f;
                         NewBody->Friction = 0.7f;
                         World->Bodies.push_back(NewBody);
                     }
@@ -124,6 +126,16 @@ process_input(world* World)
                         body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50, 23));
                         World->Bodies.push_back(NewBody);
                     }
+                }
+                if(event.button.button == SDL_BUTTON_RIGHT)
+                {
+                    i32 MouseX, MouseY;
+                    SDL_GetMouseState(&MouseX, &MouseY);
+
+                    body* NewBody = new body(V2(MouseX, MouseY), 1.0f, new shape(50, 50));
+                    NewBody->Restitution = 0.5f;
+                    NewBody->Friction = 0.7f;
+                    World->Bodies.push_back(NewBody);
                 }
             } break;
         case SDL_MOUSEMOTION:
@@ -157,10 +169,6 @@ update(world* World)
 static void 
 render(world* World)
 {
-
-    v2 P = {(r32)ColorBuffer->Width/2, (r32)ColorBuffer->Height/2};
-
-    //DrawRect(ColorBuffer, World->Liquid.Min, World->Liquid.Max, 0xFF83D7EE);
 
     for(body* Body : World->Bodies)
     {

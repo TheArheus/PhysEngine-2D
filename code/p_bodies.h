@@ -24,6 +24,10 @@ struct shape
 
     r32 GetMomentOfInertia();
     void UpdateVertices(v2 P, r32 Rotation);
+    i32 ClipSegmentToLine(std::vector<v2>& ContactPoints, std::vector<v2>& ClippedPoints, v2 C0, v2 C1);
+
+    v2 EdgeAt(u32 Index);
+    i32 FindIncidentEdge(v2 Normal);
 };
 
 struct body 
@@ -83,9 +87,6 @@ struct contact
 
     v2 Normal;
     r32 Depth;
-
-    contact() = default;
-    ~contact() = default;
 };
 
 v2 GenerateDragForce(const body& Body, r32 k);
@@ -94,11 +95,9 @@ v2 GenerateGravitationalForce(const body& BodyA, const body& BodyB, r32 G);
 v2 GenerateSpringForce(const body& Body, v2 Anchor, r32 RestLength, r32 k);
 v2 GenerateSpringForce(const body& BodyA, const body& BodyB, r32 RestLength, r32 k);
 
-b32 IsColliding(body* A, body* B, contact* ContactInfo);
-b32 CircleCircleCollision(body* A, body* B, contact* ContactInfo);
-b32 CirclePolyCollision(body* Poly, body* Circle, contact* ContactInfo);
-b32 PolyPolyCollision(body* A, body* B, contact* ContactInfo);
-void ResolvePenetration(contact* ContactInfo);
-void ResolveCollision(contact* ContactInfo);
+b32 IsColliding(body* A, body* B, std::vector<contact>* ContactsInfo);
+b32 CircleCircleCollision(body* A, body* B, std::vector<contact>* ContactInfo);
+b32 CirclePolyCollision(body* Poly, body* Circle, std::vector<contact>* ContactInfo);
+b32 PolyPolyCollision(body* A, body* B, std::vector<contact>* ContactInfo);
 
 #endif

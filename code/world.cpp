@@ -9,10 +9,16 @@ world::~world()
     {
         delete Body;
     }
+
+    for(constraint* Constraint : Constraints)
+    {
+        free(Constraint);
+    }
 }
 
 void world::Update(r32 DeltaTime)
 {
+    std::vector<constraint*> Penetrations;
     for(body* Body : Bodies)
     {
         Body->AddForce(V2(0.0f, G*Body->Mass));
@@ -29,16 +35,6 @@ void world::Update(r32 DeltaTime)
         Body->IntegrateVelocities(DeltaTime);
     }
 
-    for(constraint* Constraint : Constraints)
-    {
-        Constraint->Solve();
-    }
-
-    CheckCollisions();
-}
-
-void world::CheckCollisions()
-{
     for(u32 AIndex = 0; 
         AIndex <= Bodies.size() - 1;
         ++AIndex)
@@ -50,19 +46,24 @@ void world::CheckCollisions()
             body* A = Bodies[AIndex];
             body* B = Bodies[BIndex];
 
-            contact Contact = {};
             if(A != B)
             {
-                if (IsColliding(A, B, &Contact))
+                std::vector<contact> Contacts;
+                if(IsColliding(A, B, &Contacts))
                 {
-                    ResolveCollision(&Contact);
-
                     A->IsColliding = true;
                     B->IsColliding = true;
 
-                    DrawFilledCircle(Contact.Start - 2, 6, 6, 2, 0xFFFFFF00);
-                    DrawFilledCircle(Contact.End - 2, 6, 6, 2, 0xFFFFFF00);
-                    DrawLine(ColorBuffer, Contact.Start, Contact.Start + Contact.Normal * 15, 0xFFFFFF00);
+                    for(contact Contact : Contacts)
+                    {
+                        constraint* CollisionConstraint = (constraint*)calloc(sizeof(constraint), 1);
+                        CollisionConstraint->PenetrationConstraint(A, B, Contact.Start, Contact.End, Contact.Normal);
+                        Penetrations.push_back(CollisionConstraint);
+
+                        DrawFilledCircle(Contact.Start - 2, 6, 6, 2, 0xFFFFFF00);
+                        DrawFilledCircle(Contact.End - 2, 6, 6, 2, 0xFFFFFF00);
+                        DrawLine(ColorBuffer, Contact.Start, Contact.Start + Contact.Normal * 15, 0xFFFFFF00);
+                    }
                 }
                 else
                 {
@@ -71,5 +72,45 @@ void world::CheckCollisions()
                 }
             }
         }
+    }
+
+    for(constraint* Constraint : Constraints)
+    {
+        Constraint->PreSolve(DeltaTime);
+    }
+
+    for(constraint* Constraint : Penetrations)
+    {
+        Constraint->PreSolve(DeltaTime);
+    }
+
+    for(u32 Index = 0;
+        Index < 10;
+        ++Index)
+    {
+        for(constraint* Constraint : Constraints)
+        {
+            Constraint->Solve();
+        }
+
+        for(constraint* Constraint : Penetrations)
+        {
+            Constraint->Solve();
+        }
+    }
+
+    for(constraint* Constraint : Constraints)
+    {
+        Constraint->PostSolve();
+    }
+
+    for(constraint* Constraint : Penetrations)
+    {
+        Constraint->PostSolve();
+    }
+
+    for(constraint* Constraint : Penetrations)
+    {
+        free(Constraint);
     }
 }
